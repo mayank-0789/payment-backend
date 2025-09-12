@@ -39,7 +39,7 @@ app.get('/', (req, res) => {
 app.post('/create-order', (req, res) => {  
   
   instance.orders.create({
-    amount: 10000,
+    amount: 100,
     currency: 'INR',
     receipt: `order_${Date.now()}`,
     notes: {
