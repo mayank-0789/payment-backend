@@ -8,8 +8,9 @@ dotenv.config();
 const app = express();
 
 const ALLOWED_ORIGINS = [
-  "https://payment-fronted.vercel.app", // your prod frontend domain
-  "http://localhost:3000"               // dev
+  "https://payment-frontend.vercel.app", // your prod frontend domain (fixed typo)
+  "http://localhost:3000",               // dev
+  "http://localhost:5173"                // vite dev server
 ];
 const corsOptions = {
   origin(origin, cb) {
@@ -33,10 +34,22 @@ var instance = new Razorpay({
 // Razorpay instance is ready to use
 
 app.get('/', (req, res) => {
-  res.json({ message: 'Razorpay Payment Server is running!', status: 'success' });
+  res.json({ 
+    message: 'Razorpay Payment Server is running!', 
+    status: 'success',
+    environment: {
+      key_id_set: !!process.env.RAZORPAY_KEY_ID,
+      key_secret_set: !!process.env.RAZORPAY_KEY_SECRET,
+      key_id_prefix: process.env.RAZORPAY_KEY_ID ? process.env.RAZORPAY_KEY_ID.substring(0, 8) + '...' : 'Not set'
+    }
+  });
 });
 
 app.post('/create-order', (req, res) => {  
+  console.log('Creating order with credentials:', {
+    key_id: process.env.RAZORPAY_KEY_ID ? 'Set' : 'Missing',
+    key_secret: process.env.RAZORPAY_KEY_SECRET ? 'Set' : 'Missing'
+  });
   
   instance.orders.create({
     amount: 100,
@@ -46,22 +59,34 @@ app.post('/create-order', (req, res) => {
       description: 'E-commerce purchase'
     }
   }).then((order) => {
+    console.log('Order created successfully:', order.id);
     res.json(order);
   }).catch((err) => {
-    res.status(500).json({ error: err.message });
+    console.error('Order creation failed:', {
+      message: err.message,
+      description: err.description,
+      code: err.code,
+      source: err.source,
+      step: err.step,
+      reason: err.reason,
+      metadata: err.metadata
+    });
+    res.status(500).json({ 
+      error: err.message,
+      description: err.description,
+      code: err.code
+    });
   });
 });
 
 app.post('/payment/webhook', async (req, res) => {
   try{
-    const webhookSignature = req.headers('x-razorpay-signature');
+    const webhookSignature = req.headers['x-razorpay-signature'];
     const isValid = validateWebhookSignature(JSON.stringify(req.body), webhookSignature, process.env.RAZORPAY_WEBHOOK_SECRET);
     if(!isValid){
-      res.status(400).json({ error: 'Invalid webhook signature' });
+      return res.status(400).json({ error: 'Invalid webhook signature' });
     }
-    if(!isValid){
-      res.status(400).json({ error: 'Invalid webhook signature' });
-    }
+    
 
     //if is valid then update the payment status in the database and make the user paid
 
@@ -78,6 +103,7 @@ app.post('/payment/webhook', async (req, res) => {
     // }
  
     res.status(200).json({ status: 'ok received' });
+    console.log('Webhook received and processed successfully');
   } 
   catch(err){
     res.status(500).json({ error: err.message });
