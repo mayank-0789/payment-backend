@@ -7,8 +7,22 @@ dotenv.config();
 
 const app = express();
 
+const ALLOWED_ORIGINS = [
+  "https://payment-fronted.vercel.app", // your prod frontend domain
+  "http://localhost:3000"               // dev
+];
+const corsOptions = {
+  origin(origin, cb) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+};
+app.use(cors(corsOptions));
 
-app.use(cors());
 app.use(express.json());
 
 var instance = new Razorpay({
