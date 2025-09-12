@@ -7,6 +7,7 @@ dotenv.config();
 
 const app = express();
 
+
 app.use(cors());
 app.use(express.json());
 
@@ -21,14 +22,10 @@ app.get('/', (req, res) => {
   res.json({ message: 'Razorpay Payment Server is running!', status: 'success' });
 });
 
-app.post('/create-order', (req, res) => {
-  const { amount } = req.body;
-  
-  // Use amount from request or default to 50000 paise (₹500)
-  const orderAmount = amount || 50000;
+app.post('/create-order', (req, res) => {  
   
   instance.orders.create({
-    amount: orderAmount,
+    amount: 10000,
     currency: 'INR',
     receipt: `order_${Date.now()}`,
     notes: {
