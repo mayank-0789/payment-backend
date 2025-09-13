@@ -2,7 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import Razorpay from 'razorpay';
 import dotenv from 'dotenv';
-import { validateWebhookSignature } from 'razorpay/dist/utils/razorpay-utils.js';
+import crypto from 'crypto';
+// Removed validateWebhookSignature import - using manual validation instead
 dotenv.config();
 
 const app = express();
@@ -82,41 +83,127 @@ app.post('/create-order', (req, res) => {
 app.post('/payment/webhook', async (req, res) => {
   try{
     const webhookSignature = req.headers['x-razorpay-signature'];
-    const isValid = validateWebhookSignature(JSON.stringify(req.body), webhookSignature, process.env.RAZORPAY_WEBHOOK_SECRET);
-    if(!isValid){
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    
+    console.log('Webhook received:', {
+      signature: webhookSignature ? 'Present' : 'Missing',
+      secret: webhookSecret ? 'Set' : 'Missing',
+      body: JSON.stringify(req.body).substring(0, 100) + '...'
+    });
+
+    // Validate webhook signature
+    if (!webhookSignature) {
+      console.log('Missing webhook signature');
+      return res.status(400).json({ error: 'Missing webhook signature' });
+    }
+
+    if (!webhookSecret) {
+      console.log('Missing webhook secret in environment');
+      return res.status(500).json({ error: 'Webhook secret not configured' });
+    }
+
+    // Manual signature validation (more reliable)
+    const body = JSON.stringify(req.body);
+    const expectedSignature = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
+    
+    console.log('Signature validation:', {
+      received: webhookSignature,
+      expected: expectedSignature,
+      body_length: body.length
+    });
+    
+    if (webhookSignature !== expectedSignature) {
+      console.log('Invalid webhook signature - signatures do not match');
       return res.status(400).json({ error: 'Invalid webhook signature' });
     }
-    
 
-    //if is valid then update the payment status in the database and make the user paid
+    console.log('Webhook signature validated successfully');
 
-    // const paymentDetails = req.body.payload.payment.entity;
-    // const payment = await Payment.findOne({ id: paymentDetails.id });
-    //payment.status = paymentDetails.status;
-    //await payment.save();
+    // Process the webhook payload
+    const event = req.body.event;
+    const payloadData = req.body.payload;
 
-    //make the user paid
-    // const user = await User.findOne({ email: paymentDetails.email });
-    // if(user){
-    //   user.paid = true;
-    //   await user.save();
-    // }
- 
-    res.status(200).json({ status: 'ok received' });
-    console.log('Webhook received and processed successfully');
+    console.log('Processing webhook event:', event);
+
+    switch (event) {
+      case 'payment.captured':
+        console.log('Payment captured:', payloadData.payment?.entity?.id);
+        // Handle successful payment
+        // const paymentDetails = payloadData.payment.entity;
+        // Update database, mark user as paid, etc.
+        break;
+        
+      case 'payment.failed':
+        console.log('Payment failed:', payloadData.payment?.entity?.id);
+        // Handle failed payment
+        break;
+        
+      case 'order.paid':
+        console.log('Order paid:', payloadData.order?.entity?.id);
+        // Handle order completion
+        break;
+        
+      default:
+        console.log('Unhandled webhook event:', event);
+    }
+
+    // Always respond with 200 to acknowledge receipt
+    res.status(200).json({ status: 'ok', event: event });
+    console.log('Webhook processed successfully');
   } 
   catch(err){
+    console.error('Webhook processing error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/payment/verify', (req, res) => {
-  const user = req.user.toJSON();
-  console.log(user);
-  if (user.paid) {
-    return res.json({ ...user });
+  try {
+    // This route needs proper authentication middleware
+    // For now, let's make it a simple verification endpoint
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    
+    console.log('Payment verification request:', {
+      order_id: razorpay_order_id,
+      payment_id: razorpay_payment_id,
+      signature: razorpay_signature ? 'Present' : 'Missing'
+    });
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['razorpay_order_id', 'razorpay_payment_id', 'razorpay_signature']
+      });
+    }
+
+    // Verify payment signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    const isAuthentic = expectedSignature === razorpay_signature;
+
+    if (isAuthentic) {
+      console.log('Payment verified successfully');
+      res.json({ 
+        success: true, 
+        message: 'Payment verified successfully',
+        payment_id: razorpay_payment_id,
+        order_id: razorpay_order_id
+      });
+    } else {
+      console.log('Payment verification failed');
+      res.status(400).json({ 
+        success: false, 
+        message: 'Payment verification failed' 
+      });
+    }
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({ error: error.message });
   }
-  return res.json({ ...user });
 });
 
 app.listen(3000, () => {
