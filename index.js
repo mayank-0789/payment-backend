@@ -9,7 +9,7 @@ dotenv.config();
 const app = express();
 
 const ALLOWED_ORIGINS = [
-  "https://payment-frontend.vercel.app", // your prod frontend domain (fixed typo)
+  "https://payment-fronted.vercel.app", // your prod frontend domain (fixed typo)
   "http://localhost:3000",               // dev
   "http://localhost:5173"                // vite dev server
 ];
